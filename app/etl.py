@@ -1,53 +1,23 @@
-import os
-import boto3
-import json
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from utils import mask_pii
-from dotenv import load_dotenv
-
-load_dotenv()
-
-SQS_QUEUE_URL = os.getenv("SQS_QUEUE_URL")
-AWS_REGION = os.getenv("AWS_REGION")
-DATABASE_URL = os.getenv("DATABASE_URL")
-
-def get_sqs_messages():
-    sqs = boto3.client('sqs', region_name=AWS_REGION)
-    response = sqs.receive_message(
-        QueueUrl=SQS_QUEUE_URL,
-        MaxNumberOfMessages=10,
-        WaitTimeSeconds=10
-    )
-    messages = response.get('Messages', [])
-    return messages
-
-def process_message(message_body):
-    data = json.loads(message_body)
-    data['masked_ip'] = mask_pii(data['ip'])
-    data['masked_device_id'] = mask_pii(data['device_id'])
-    del data['ip']
-    del data['device_id']
-    return data
-
-def write_to_postgres(data):
-    engine = create_engine(DATABASE_URL)
-    Session = sessionmaker(bind=engine)
-    session = Session()
-
-    insert_query = """
-    INSERT INTO user_logins (user_id, device_type, masked_ip, masked_device_id, locale, app_version, create_date)
-    VALUES (:user_id, :device_type, :masked_ip, :masked_device_id, :locale, :app_version, :create_date)
-    """
-    session.execute(insert_query, data)
-    session.commit()
-    session.close()
+from sqs_reader import SQSReader
+from data_transformer import DataTransformer
+from db_writer import DBWriter
 
 def main():
-    messages = get_sqs_messages()
-    for message in messages:
-        data = process_message(message['Body'])
-        write_to_postgres(data)
+    sqs_queue_url = "http://localhost:4566/000000000000/login-queue"
+    postgres_config = {
+        'dbname': 'postgres',
+        'user': 'postgres',
+        'password': 'postgres',
+        'host': 'localhost'
+    }
+
+    sqs_reader = SQSReader(sqs_queue_url)
+    data_transformer = DataTransformer()
+    db_writer = DBWriter(postgres_config)
+
+    messages = sqs_reader.read_messages()
+    transformed_data = data_transformer.transform(messages)
+    db_writer.write_to_db(transformed_data)
 
 if __name__ == "__main__":
     main()
