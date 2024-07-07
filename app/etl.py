@@ -8,12 +8,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-SQS_QUEUE_URL = "http://localhost:4566/000000000000/login-queue"
-AWS_REGION = "us-east-1"
+SQS_QUEUE_URL = os.getenv("SQS_QUEUE_URL")
+AWS_REGION = os.getenv("AWS_REGION")
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 def get_sqs_messages():
-    sqs = boto3.client('sqs', region_name=AWS_REGION, endpoint_url='http://localhost:4566')
+    sqs = boto3.client('sqs', region_name=AWS_REGION)
     response = sqs.receive_message(
         QueueUrl=SQS_QUEUE_URL,
         MaxNumberOfMessages=10,
@@ -51,7 +51,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-#
